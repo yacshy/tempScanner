@@ -24,17 +24,21 @@ export class Scanner {
     elevation: number;
   };
   window: [number, number, number, number];
+  arcoSize: number;
+  stepSize: number;
 
   constructor(radarOption: { lon: number; lat: number; radius: number }) {
     this.radar = {
       ...radarOption,
       elevation: 0,
     };
+    this.arcoSize = 360 * 2;
+    this.stepSize = 500;
   }
 
   async initialize() {
     const { lon, lat, radius } = this.radar;
-    this.boundry = this.computeRadarBoundary(lon, lat, radius, 360 * 1);
+    this.boundry = this.computeRadarBoundary(lon, lat, radius, this.arcoSize);
 
     const image = await fromFile(
       path.join(__dirname, '../../assets/demo30.tif'),
@@ -151,6 +155,10 @@ export class Scanner {
       console.log('res: ', res);
       console.log('index: ', index);
       console.log('formatIndex: ', formatIndex);
+      console.log(
+        'index out of range: ',
+        formatIndex - this.elevationData.length,
+      );
       throw new Error('index out of range');
     }
     return res;
@@ -167,8 +175,9 @@ export class Scanner {
   }): [number, number, number, number] {
     // window是雷达圆形范围的内接矩形，需要额外扩大window范围才能把雷达圆变成window矩形的内接圆，现在暂且简单地加上500px，实际需要根据半径计算
     // 计算最小外接矩形的四个顶点像素坐标
-    const pixels = [0, 45, 90, 135, 180, 225, 270, 315]
-      .map((bearing) => {
+    const pixels = Array.from({ length: this.arcoSize })
+      .map((_, index) => {
+        const bearing = (index * 360) / this.arcoSize;
         return geolib.computeDestinationPoint(
           { longitude: lon, latitude: lat },
           radius,
@@ -180,12 +189,21 @@ export class Scanner {
           Math.floor(i),
         );
       });
-    const x_max = Math.max(...pixels.map((item) => item[0]));
-    const y_max = Math.max(...pixels.map((item) => item[1]));
-    const x_min = Math.min(...pixels.map((item) => item[0]));
-    const y_min = Math.min(...pixels.map((item) => item[1]));
+
+    let x_max = -Infinity;
+    let y_max = -Infinity;
+    let x_min = Infinity;
+    let y_min = Infinity;
+
+    for (let i = 0; i < pixels.length; i++) {
+      const [x, y] = pixels[i];
+      x_max = Math.max(x_max, x);
+      y_max = Math.max(y_max, y);
+      x_min = Math.min(x_min, x);
+      y_min = Math.min(y_min, y);
+    }
     // 补偿值
-    const compensation = 100;
+    const compensation = 500;
     return [
       x_min - compensation,
       y_min - compensation,
@@ -220,7 +238,12 @@ export class Scanner {
     const result_8k = { slope: slope_8k, lonlat: aim[2] };
     const result_10k = { slope: slope_10k, lonlat: aim[3] };
 
-    for (let distance = 0; distance <= radius; distance += 1000) {
+    const max_distance_3k = Math.sqrt(radius ** 2 - 3000 ** 2);
+    const max_distance_5k = Math.sqrt(radius ** 2 - 5000 ** 2);
+    const max_distance_8k = Math.sqrt(radius ** 2 - 8000 ** 2);
+    const max_distance_10k = Math.sqrt(radius ** 2 - 10000 ** 2);
+
+    for (let distance = 0; distance <= radius; distance += this.stepSize) {
       const { longitude, latitude } = geolib.computeDestinationPoint(
         { longitude: lon, latitude: lat },
         distance,
@@ -229,19 +252,19 @@ export class Scanner {
       const [x, y] = this.lonLatToPixel(longitude, latitude);
       const elevation_current = this.getElevationByPixel(x, y);
       const slope = (elevation_current - elevation) / distance;
-      if (slope <= result_3k.slope && distance <= 3000) {
+      if (slope <= result_3k.slope && distance <= max_distance_3k) {
         result_3k.lonlat = [longitude, latitude];
         result_3k.slope = slope;
       }
-      if (slope <= result_5k.slope && distance <= 5000) {
+      if (slope <= result_5k.slope && distance <= max_distance_5k) {
         result_5k.lonlat = [longitude, latitude];
         result_5k.slope = slope;
       }
-      if (slope <= result_8k.slope && distance <= 8000) {
+      if (slope <= result_8k.slope && distance <= max_distance_8k) {
         result_8k.lonlat = [longitude, latitude];
         result_8k.slope = slope;
       }
-      if (slope <= result_10k.slope && distance <= 10000) {
+      if (slope <= result_10k.slope && distance <= max_distance_10k) {
         result_10k.lonlat = [longitude, latitude];
         result_10k.slope = slope;
       }

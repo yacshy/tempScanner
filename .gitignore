@@ -1,4 +1,5 @@
 # compiled output
+/assets
 /dist
 /node_modules
 /build

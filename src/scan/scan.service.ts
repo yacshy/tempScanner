@@ -1,5 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { Scanner, type ScannerResultZip } from '../scanner/scanner';
+import { Scanner } from '../scanner/scanner';
+
+export interface GeoJson {
+  type: 'FeatureCollection';
+  features: Array<{
+    type: 'Feature';
+    properties: Record<string, any>;
+    geometry: {
+      type: 'Polygon';
+      coordinates: [number, number][][];
+    };
+  }>;
+}
 
 @Injectable()
 export class ScanService {
@@ -7,10 +19,22 @@ export class ScanService {
     lon: number;
     lat: number;
     radius: number;
-  }): Promise<ScannerResultZip> {
+  }): Promise<GeoJson> {
     const scanner = new Scanner(radarOption);
     await scanner.initialize();
     const result = scanner.starScan();
-    return result;
+    return {
+      type: 'FeatureCollection',
+      features: result.map((coords) => {
+        return {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[...coords, coords[0]]],
+          },
+        };
+      }),
+    };
   }
 }
