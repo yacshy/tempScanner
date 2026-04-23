@@ -62,10 +62,10 @@ export class Scanner {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      const lonlat_3k = line[0].lonlat;
-      const lonlat_5k = line[1].lonlat;
-      const lonlat_8k = line[2].lonlat;
-      const lonlat_10k = line[3].lonlat;
+      const lonlat_3k = line[0];
+      const lonlat_5k = line[1];
+      const lonlat_8k = line[2];
+      const lonlat_10k = line[3];
       result[0].push(lonlat_3k);
       result[1].push(lonlat_5k);
       result[2].push(lonlat_8k);
@@ -87,41 +87,41 @@ export class Scanner {
     radius: number,
     steps = 360,
   ): [number, number][][] {
-    const R = 6378137; // 地球半径（米）
-
-    const calcLoncLat = (r: number, bearing: number) => {
-      const newLat = Math.asin(
-        Math.sin(latRad) * Math.cos(r / R) +
-          Math.cos(latRad) * Math.sin(r / R) * Math.cos(bearing),
-      );
-
-      const newLon =
-        lonRad +
-        Math.atan2(
-          Math.sin(bearing) * Math.sin(r / R) * Math.cos(latRad),
-          Math.cos(r / R) - Math.sin(latRad) * Math.sin(newLat),
-        );
-      return [newLon, newLat];
-    };
-
     const result: [number, number][][] = [];
 
-    const lonRad = (lon * Math.PI) / 180;
-    const latRad = (lat * Math.PI) / 180;
-
     for (let i = 0; i < steps; i++) {
-      const bearing = (i * Math.PI * 2) / steps;
-      const [newLon_max, newLat_max] = calcLoncLat(radius, bearing);
-      const [newLon_3k, newLat_3k] = calcLoncLat(3000, bearing);
-      const [newLon_5k, newLat_5k] = calcLoncLat(5000, bearing);
-      const [newLon_8k, newLat_8k] = calcLoncLat(8000, bearing);
-      const [newLon_10k, newLat_10k] = calcLoncLat(10000, bearing);
+      const bearing = (i * 360) / steps;
+      const lonlta_3k = geolib.computeDestinationPoint(
+        { longitude: lon, latitude: lat },
+        3000,
+        bearing,
+      );
+      const lonlta_5k = geolib.computeDestinationPoint(
+        { longitude: lon, latitude: lat },
+        5000,
+        bearing,
+      );
+      const lonlta_8k = geolib.computeDestinationPoint(
+        { longitude: lon, latitude: lat },
+        8000,
+        bearing,
+      );
+      const lonlta_10k = geolib.computeDestinationPoint(
+        { longitude: lon, latitude: lat },
+        10000,
+        bearing,
+      );
+      const lonlta_max = geolib.computeDestinationPoint(
+        { longitude: lon, latitude: lat },
+        radius,
+        bearing,
+      );
       result.push([
-        [(newLon_3k * 180) / Math.PI, (newLat_3k * 180) / Math.PI],
-        [(newLon_5k * 180) / Math.PI, (newLat_5k * 180) / Math.PI],
-        [(newLon_8k * 180) / Math.PI, (newLat_8k * 180) / Math.PI],
-        [(newLon_10k * 180) / Math.PI, (newLat_10k * 180) / Math.PI],
-        [(newLon_max * 180) / Math.PI, (newLat_max * 180) / Math.PI],
+        [lonlta_3k.longitude, lonlta_3k.latitude],
+        [lonlta_5k.longitude, lonlta_5k.latitude],
+        [lonlta_8k.longitude, lonlta_8k.latitude],
+        [lonlta_10k.longitude, lonlta_10k.latitude],
+        [lonlta_max.longitude, lonlta_max.latitude],
       ]);
     }
 
@@ -215,35 +215,34 @@ export class Scanner {
   computeBoundryOfLine(
     aim: [number, number][],
     bearing: number,
-  ): [ScannerResult, ScannerResult, ScannerResult, ScannerResult] {
+  ): [number, number][] {
     const { lon, lat, radius, elevation } = this.radar;
 
-    const [x_3k, y_3k] = this.lonLatToPixel(aim[0][0], aim[0][1]);
-    const [x_5k, y_5k] = this.lonLatToPixel(aim[1][0], aim[1][1]);
-    const [x_8k, y_8k] = this.lonLatToPixel(aim[2][0], aim[2][1]);
-    const [x_10k, y_10k] = this.lonLatToPixel(aim[3][0], aim[3][1]);
+    // const [x_3k, y_3k] = this.lonLatToPixel(aim[0][0], aim[0][1]);
+    // const [x_5k, y_5k] = this.lonLatToPixel(aim[1][0], aim[1][1]);
+    // const [x_8k, y_8k] = this.lonLatToPixel(aim[2][0], aim[2][1]);
+    // const [x_10k, y_10k] = this.lonLatToPixel(aim[3][0], aim[3][1]);
 
-    const elevation_3k = this.getElevationByPixel(x_3k, y_3k);
-    const elevation_5k = this.getElevationByPixel(x_5k, y_5k);
-    const elevation_8k = this.getElevationByPixel(x_8k, y_8k);
-    const elevation_10k = this.getElevationByPixel(x_10k, y_10k);
+    // const elevation_3k = this.getElevationByPixel(x_3k, y_3k);
+    // const elevation_5k = this.getElevationByPixel(x_5k, y_5k);
+    // const elevation_8k = this.getElevationByPixel(x_8k, y_8k);
+    // const elevation_10k = this.getElevationByPixel(x_10k, y_10k);
 
-    const slope_3k = (elevation_3k - elevation) / 3000;
-    const slope_5k = (elevation_5k - elevation) / 5000;
-    const slope_8k = (elevation_8k - elevation) / 8000;
-    const slope_10k = (elevation_10k - elevation) / 10000;
+    const max_distance_3k = Math.sqrt(radius ** 2 - (3000 - elevation) ** 2);
+    const max_distance_5k = Math.sqrt(radius ** 2 - (5000 - elevation) ** 2);
+    const max_distance_8k = Math.sqrt(radius ** 2 - (8000 - elevation) ** 2);
+    const max_distance_10k = Math.sqrt(radius ** 2 - (10000 - elevation) ** 2);
 
-    const result_3k = { slope: slope_3k, lonlat: aim[0] };
-    const result_5k = { slope: slope_5k, lonlat: aim[1] };
-    const result_8k = { slope: slope_8k, lonlat: aim[2] };
-    const result_10k = { slope: slope_10k, lonlat: aim[3] };
+    let slope_3k = (3000 - elevation) / max_distance_3k;
+    let slope_5k = (5000 - elevation) / max_distance_5k;
+    let slope_8k = (8000 - elevation) / max_distance_8k;
+    let slope_10k = (10000 - elevation) / max_distance_10k;
 
-    const max_distance_3k = Math.sqrt(radius ** 2 - 3000 ** 2);
-    const max_distance_5k = Math.sqrt(radius ** 2 - 5000 ** 2);
-    const max_distance_8k = Math.sqrt(radius ** 2 - 8000 ** 2);
-    const max_distance_10k = Math.sqrt(radius ** 2 - 10000 ** 2);
-
-    for (let distance = 0; distance <= radius; distance += this.stepSize) {
+    for (
+      let distance = this.stepSize;
+      distance <= radius;
+      distance += this.stepSize
+    ) {
       const { longitude, latitude } = geolib.computeDestinationPoint(
         { longitude: lon, latitude: lat },
         distance,
@@ -252,23 +251,62 @@ export class Scanner {
       const [x, y] = this.lonLatToPixel(longitude, latitude);
       const elevation_current = this.getElevationByPixel(x, y);
       const slope = (elevation_current - elevation) / distance;
-      if (slope <= result_3k.slope && distance <= max_distance_3k) {
-        result_3k.lonlat = [longitude, latitude];
-        result_3k.slope = slope;
+      if (slope > slope_3k && distance <= max_distance_3k) {
+        slope_3k = slope;
       }
-      if (slope <= result_5k.slope && distance <= max_distance_5k) {
-        result_5k.lonlat = [longitude, latitude];
-        result_5k.slope = slope;
+      if (slope > slope_5k && distance <= max_distance_5k) {
+        slope_5k = slope;
       }
-      if (slope <= result_8k.slope && distance <= max_distance_8k) {
-        result_8k.lonlat = [longitude, latitude];
-        result_8k.slope = slope;
+      if (slope > slope_8k && distance <= max_distance_8k) {
+        slope_8k = slope;
       }
-      if (slope <= result_10k.slope && distance <= max_distance_10k) {
-        result_10k.lonlat = [longitude, latitude];
-        result_10k.slope = slope;
+      if (slope > slope_10k && distance <= max_distance_10k) {
+        slope_10k = slope;
       }
     }
+
+    const distance_3k = (3000 - elevation) / slope_3k;
+    const distance_5k = (5000 - elevation) / slope_5k;
+    const distance_8k = (8000 - elevation) / slope_8k;
+    const distance_10k = (10000 - elevation) / slope_10k;
+
+    const lonlat_3k = geolib.computeDestinationPoint(
+      { longitude: lon, latitude: lat },
+      distance_3k,
+      bearing,
+    );
+    const lonlat_5k = geolib.computeDestinationPoint(
+      { longitude: lon, latitude: lat },
+      distance_5k,
+      bearing,
+    );
+    const lonlat_8k = geolib.computeDestinationPoint(
+      { longitude: lon, latitude: lat },
+      distance_8k,
+      bearing,
+    );
+    const lonlat_10k = geolib.computeDestinationPoint(
+      { longitude: lon, latitude: lat },
+      distance_10k,
+      bearing,
+    );
+
+    const result_3k = [lonlat_3k.longitude, lonlat_3k.latitude] as [
+      number,
+      number,
+    ];
+    const result_5k = [lonlat_5k.longitude, lonlat_5k.latitude] as [
+      number,
+      number,
+    ];
+    const result_8k = [lonlat_8k.longitude, lonlat_8k.latitude] as [
+      number,
+      number,
+    ];
+    const result_10k = [lonlat_10k.longitude, lonlat_10k.latitude] as [
+      number,
+      number,
+    ];
 
     return [result_3k, result_5k, result_8k, result_10k];
   }

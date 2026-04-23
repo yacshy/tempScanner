@@ -19,22 +19,24 @@ export class ScanService {
     lon: number;
     lat: number;
     radius: number;
-  }): Promise<GeoJson> {
+  }): Promise<Array<GeoJson>> {
     const scanner = new Scanner(radarOption);
     await scanner.initialize();
     const result = scanner.starScan();
-    return {
-      type: 'FeatureCollection',
-      features: result.map((coords) => {
-        return {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'Polygon',
-            coordinates: [[...coords, coords[0]]],
+    return result.map((coords) => {
+      return {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[...coords, coords[0]]],
+            },
           },
-        };
-      }),
-    };
+        ],
+      };
+    });
   }
 }

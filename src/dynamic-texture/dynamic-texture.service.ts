@@ -52,7 +52,7 @@ export class DynamicTextureService {
     modelPath: string,
     texturePath: string,
     outputPath: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const io = new NodeIO();
     // 1. 加载模型（支持 glTF/GLB）
     const document = await io.read(modelPath);
@@ -78,6 +78,7 @@ export class DynamicTextureService {
       });
     // 5. 导出为 GLB 文件
     await io.write(outputPath, document);
+    return 'success';
   }
 
   async fullRegenerateModel(): Promise<string> {
@@ -88,7 +89,7 @@ export class DynamicTextureService {
     const modelNames = await fse.readdir(modelPath);
     const outputDir = path.resolve(__dirname, '../../assets/glb-models');
 
-    const genPromises: Array<Promise<void>> = [];
+    const genPromises: Array<Promise<string>> = [];
 
     for (const textureName of textureNames) {
       const texturePath = path.resolve(texturesPath, textureName);

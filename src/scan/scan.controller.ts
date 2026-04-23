@@ -8,7 +8,9 @@ export class ScanController {
   constructor(private readonly scanService: ScanService) {}
 
   @Post('scan-area')
-  async scanArea(@Body() radarOption: ScanAreaRequestDto): Promise<GeoJson> {
+  async scanArea(
+    @Body() radarOption: ScanAreaRequestDto,
+  ): Promise<Array<GeoJson>> {
     return await this.scanService.scanArea(radarOption);
   }
 }
