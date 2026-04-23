@@ -12,10 +12,7 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { DynamicTextureService } from './dynamic-texture.service';
 import { UploadModelResponseDto } from './dto/UploadModelDto';
 import { UploadTextureResponseDto } from './dto/UploadTextureDto';
-<<<<<<< HEAD
 import path from 'path';
-=======
->>>>>>> ef70a3d040563b54628831e67aaeadb96b29f9f0
 
 @Controller('dynamic-texture')
 export class DynamicTextureController {
@@ -65,17 +62,14 @@ export class DynamicTextureController {
 
   @Get('regenerate-model')
   async regenerateModel(): Promise<string> {
-<<<<<<< HEAD
     const modelPath = path.resolve(__dirname, '../../assets/glb-models');
     const texturePath = path.resolve(__dirname, '../../assets/model-textures');
     const outputPath = path.resolve(__dirname, '../../assets/glb-models');
-    return await this.dynamicTextureService.regenerateModel(
+    await this.dynamicTextureService.regenerateModel(
       modelPath,
       texturePath,
       outputPath,
     );
-=======
-    return await this.dynamicTextureService.regenerateModel();
->>>>>>> ef70a3d040563b54628831e67aaeadb96b29f9f0
+    return 'regenerate model success';
   }
 }
