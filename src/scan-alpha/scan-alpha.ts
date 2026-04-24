@@ -14,7 +14,7 @@ export type ScannerResultZip = [
   [number, number][],
 ];
 
-export class Scanner {
+export class ScannerAlpha {
   elevationData: TypedArray;
   boundry: [number, number][][];
   radar: {
@@ -26,6 +26,10 @@ export class Scanner {
   window: [number, number, number, number];
   arcoSize: number;
   stepSize: number;
+  max_distance_3k: number;
+  max_distance_5k: number;
+  max_distance_8k: number;
+  max_distance_10k: number;
 
   constructor(radarOption: { lon: number; lat: number; radius: number }) {
     this.radar = {
@@ -52,6 +56,22 @@ export class Scanner {
     this.elevationData = rasters[0] as TypedArray;
     const [x, y] = this.lonLatToPixel(lon, lat);
     this.radar.elevation = this.getElevationBilinear(x, y);
+
+    this.max_distance_3k = Math.sqrt(
+      radius ** 2 - (3000 - this.radar.elevation) ** 2,
+    );
+    this.max_distance_5k = Math.sqrt(
+      radius ** 2 - (5000 - this.radar.elevation) ** 2,
+    );
+    this.max_distance_8k = Math.sqrt(
+      radius ** 2 - (8000 - this.radar.elevation) ** 2,
+    );
+    this.max_distance_10k = Math.sqrt(
+      radius ** 2 - (10000 - this.radar.elevation) ** 2,
+    );
+
+    // console.log('this.radar.elevation: ', this.radar.elevation);
+    // throw new Error('initialize error');
   }
 
   starScan(): ScannerResultZip {
@@ -74,6 +94,12 @@ export class Scanner {
     return result;
   }
 
+  // private transform = {
+  //   scaleX: 0.02197265625,
+  //   scaleY: -0.02197265625,
+  //   tieX: -104.765625,
+  //   tieY: 89.82421875,
+  // };
   private transform = {
     scaleX: 0.0054931641,
     scaleY: -0.0054931641,
@@ -129,18 +155,29 @@ export class Scanner {
   }
 
   lonLatToPixel(lon: number, lat: number) {
+    // const { scaleX, scaleY, tieX, tieY } = this.transform;
+
+    // const x = (lon - tieX) / scaleX;
+    // const y = (lat - tieY) / scaleY;
+    // return [x, y];
     const { scaleX, scaleY, tieX, tieY } = this.transform;
 
     const x = (lon - tieX) / scaleX;
-    const y = (lat - tieY) / scaleY;
+    const y = (tieY - lat) / Math.abs(scaleY);
     return [x, y];
   }
 
   pixelToLonLat(x: number, y: number) {
+    // const { scaleX, scaleY, tieX, tieY } = this.transform;
+
+    // const lon = tieX + x * scaleX;
+    // const lat = tieY + y * scaleY;
+    // return [lon, lat];
     const { scaleX, scaleY, tieX, tieY } = this.transform;
 
     const lon = tieX + x * scaleX;
-    const lat = tieY + y * scaleY;
+    const lat = tieY - y * Math.abs(scaleY);
+
     return [lon, lat];
   }
 
@@ -171,7 +208,7 @@ export class Scanner {
     const index = x - this.window[0] + (y - this.window[1]) * width;
     const formatIndex = Math.floor(index);
     const res = this.elevationData[formatIndex];
-    if (!res) {
+    if (res.constructor.name !== 'Number') {
       console.log('posi: ', y, x);
       console.log('width: ', width);
       console.log('res: ', res);
@@ -238,18 +275,26 @@ export class Scanner {
     aim: [number, number][],
     bearing: number,
   ): [number, number][] {
-    const { lon, lat, radius, elevation } = this.radar;
+    const { lon, lat, elevation } = this.radar;
 
-    let maxSlope = -Infinity;
+    let slope_3k = (3000 - elevation) / this.max_distance_3k;
+    let slope_5k = (5000 - elevation) / this.max_distance_5k;
+    let slope_8k = (8000 - elevation) / this.max_distance_8k;
+    let slope_10k = (10000 - elevation) / this.max_distance_10k;
 
-    let d3 = 0,
-      d5 = 0,
-      d8 = 0,
-      d10 = 0;
+    let _distance_3k = this.max_distance_3k;
+    let _distance_5k = this.max_distance_5k;
+    let _distance_8k = this.max_distance_8k;
+    let _distance_10k = this.max_distance_10k;
+
+    let _elevation_3k = 3000;
+    let _elevation_5k = 5000;
+    let _elevation_8k = 8000;
+    let _elevation_10k = 10000;
 
     for (
       let distance = this.stepSize;
-      distance <= radius;
+      distance <= this.max_distance_10k;
       distance += this.stepSize
     ) {
       const { longitude, latitude } = geolib.computeDestinationPoint(
@@ -257,49 +302,79 @@ export class Scanner {
         distance,
         bearing,
       );
-
       const [x, y] = this.lonLatToPixel(longitude, latitude);
-
       const elevation_current = this.getElevationBilinear(x, y);
-
-      const terrainSlope = (elevation_current - elevation) / distance;
-
-      // ❗只更新一次
-      if (terrainSlope > maxSlope) {
-        maxSlope = terrainSlope;
+      const slope = (elevation_current - elevation) / distance;
+      if (slope > slope_3k && distance <= this.max_distance_3k) {
+        slope_3k = slope;
+        _distance_3k = distance;
+        _elevation_3k = elevation_current;
       }
-
-      // ❗统一用这个 maxSlope 判定
-      const slope3 = (3000 - elevation) / distance;
-      if (slope3 >= maxSlope) d3 = distance;
-
-      const slope5 = (5000 - elevation) / distance;
-      if (slope5 >= maxSlope) d5 = distance;
-
-      const slope8 = (8000 - elevation) / distance;
-      if (slope8 >= maxSlope) d8 = distance;
-
-      const slope10 = (10000 - elevation) / distance;
-      if (slope10 >= maxSlope) d10 = distance;
+      if (slope > slope_5k && distance <= this.max_distance_5k) {
+        slope_5k = slope;
+        _distance_5k = distance;
+        _elevation_5k = elevation_current;
+      }
+      if (slope > slope_8k && distance <= this.max_distance_8k) {
+        slope_8k = slope;
+        _distance_8k = distance;
+        _elevation_8k = elevation_current;
+      }
+      if (slope > slope_10k && distance <= this.max_distance_10k) {
+        slope_10k = slope;
+        _distance_10k = distance;
+        _elevation_10k = elevation_current;
+      }
     }
 
-    const getPoint = (t: { d: number }): [number, number] => {
-      const d = Math.min(t.d, radius); // ❗关键
+    const distance_3k = Math.min(
+      Math.abs((3000 - elevation) / slope_3k),
+      this.max_distance_3k,
+    );
+    const distance_5k = Math.min(
+      Math.abs((5000 - elevation) / slope_5k),
+      this.max_distance_5k,
+    );
+    const distance_8k = Math.min(
+      Math.abs((8000 - elevation) / slope_8k),
+      this.max_distance_8k,
+    );
+    const distance_10k = Math.min(
+      Math.abs((10000 - elevation) / slope_10k),
+      this.max_distance_10k,
+    );
 
+    console.log('slope_3k, slope_5k, slope_8k, slope_10k', {
+      slope_3k,
+      slope_5k,
+      slope_8k,
+      slope_10k,
+      _elevation_3k,
+      _elevation_5k,
+      _elevation_8k,
+      _elevation_10k,
+      _distance_3k,
+      _distance_5k,
+      _distance_8k,
+      _distance_10k,
+      [3000 - elevation]: distance_3k,
+      [5000 - elevation]: distance_5k,
+      [8000 - elevation]: distance_8k,
+      [10000 - elevation]: distance_10k,
+    });
+
+    // distance_3k = distance_3k < 0 ? this.max_distance_3k : distance_3k;
+    // distance_5k = distance_5k < 0 ? this.max_distance_5k : distance_5k;
+    // distance_8k = distance_8k < 0 ? this.max_distance_8k : distance_8k;
+    // distance_10k = distance_10k < 0 ? this.max_distance_10k : distance_10k;
+
+    return [distance_3k, distance_5k, distance_8k, distance_10k].map((d) => {
       const { longitude, latitude } = geolib.computeDestinationPoint(
         { longitude: lon, latitude: lat },
         d,
         bearing,
       );
-
       return [longitude, latitude];
-    };
-
-    return [
-      getPoint({ d: d3 }),
-      getPoint({ d: d5 }),
-      getPoint({ d: d8 }),
-      getPoint({ d: d10 }),
-    ] as [number, number][];
+    });
   }
 }

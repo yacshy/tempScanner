@@ -1,6 +1,8 @@
 import * as geolib from 'geolib';
-import { fromFile, TypedArray } from 'geotiff';
+import { fromFile } from 'geotiff';
+import type { GeoTIFFImage, GeoTIFF, TypedArray } from 'geotiff';
 import path from 'path';
+import type { GeoKeyName } from 'node_modules/geotiff/dist-module/globals.js';
 
 export interface ScannerResult {
   slope: number;
@@ -14,7 +16,7 @@ export type ScannerResultZip = [
   [number, number][],
 ];
 
-export class Scanner {
+export class ScannerAlpha {
   elevationData: TypedArray;
   boundry: [number, number][][];
   radar: {
@@ -23,9 +25,26 @@ export class Scanner {
     radius: number;
     elevation: number;
   };
+  width: number;
+  height: number;
   window: [number, number, number, number];
   arcoSize: number;
   stepSize: number;
+  geoTransform: number[];
+
+  tiff: GeoTIFF;
+  image: GeoTIFFImage;
+  tiePoints: Array<{
+    i: number;
+    j: number;
+    k: number;
+    x: number;
+    y: number;
+    z: number;
+  }>;
+  resolution: number[];
+  origin: number[];
+  geoKeys: Partial<Record<GeoKeyName, any>> | null;
 
   constructor(radarOption: { lon: number; lat: number; radius: number }) {
     this.radar = {
@@ -40,23 +59,71 @@ export class Scanner {
     const { lon, lat, radius } = this.radar;
     this.boundry = this.computeRadarBoundary(lon, lat, radius, this.arcoSize);
 
-    const image = await fromFile(
-      path.join(__dirname, '../../assets/demo30.tif'),
-    );
-    const window = this.computeWindow(this.radar);
+    this.tiff = await fromFile(path.join(__dirname, '../../assets/demo90.tif'));
+    this.image = await this.tiff.getImage();
+    this.tiePoints = await this.image.getTiePoints();
+
+    this.width = this.image.getWidth();
+    this.height = this.image.getHeight();
+    this.resolution = this.image.getResolution();
+    this.origin = this.image.getOrigin();
+    this.geoKeys = this.image.getGeoKeys();
+
+    const modelPixelScale =
+      this.image.fileDirectory.getValue('ModelPixelScale');
+
+    if (this.tiePoints && this.tiePoints.length > 0) {
+      const tiePoint = this.tiePoints[0];
+      let pixelScaleX: number, pixelScaleY: number;
+      if (modelPixelScale) {
+        pixelScaleX = modelPixelScale[0];
+        pixelScaleY = modelPixelScale[1];
+      } else {
+        pixelScaleX = this.resolution[0];
+        pixelScaleY = Math.abs(this.resolution[1]);
+      }
+
+      this.geoTransform = [
+        tiePoint.x,
+        pixelScaleX,
+        0,
+        tiePoint.y,
+        0,
+        -pixelScaleY,
+      ];
+    } else {
+      this.geoTransform = [
+        this.origin[0],
+        this.resolution[0],
+        0,
+        this.origin[1],
+        0,
+        -Math.abs(this.resolution[1]),
+      ];
+    }
+
+    const window = [0, 0, this.width, this.height] as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    // this.computeWindow(this.radar);
     console.log('window: ', window);
     // 读取整个影像的栅格数据
-    const rasters = await image.readRasters({ window });
+    const rasters = await this.tiff.readRasters({ window });
     this.window = window;
     // 对于单波段高程数据，直接取第一个数组
     this.elevationData = rasters[0] as TypedArray;
     const [x, y] = this.lonLatToPixel(lon, lat);
-    this.radar.elevation = this.getElevationBilinear(x, y);
+    this.radar.elevation = this.getElevationByPixel(x, y);
+    console.log('this.radar.elevation: ', this);
+    throw new Error('elevation is 0');
   }
 
   starScan(): ScannerResultZip {
-    const lines = this.boundry.map((item, index) =>
-      this.computeBoundryOfLine(item, (index * 360) / this.boundry.length),
+    const lines = this.boundry.map((_, index) =>
+      this.computeBoundryOfLine((index * 360) / this.boundry.length),
     );
     const result: ScannerResultZip = [[], [], [], []];
     for (let i = 0; i < lines.length; i++) {
@@ -73,13 +140,6 @@ export class Scanner {
     }
     return result;
   }
-
-  private transform = {
-    scaleX: 0.0054931641,
-    scaleY: -0.0054931641,
-    tieX: -180,
-    tieY: 90,
-  };
 
   computeRadarBoundary(
     lon: number,
@@ -129,18 +189,16 @@ export class Scanner {
   }
 
   lonLatToPixel(lon: number, lat: number) {
-    const { scaleX, scaleY, tieX, tieY } = this.transform;
-
-    const x = (lon - tieX) / scaleX;
-    const y = (lat - tieY) / scaleY;
-    return [x, y];
+    const [originX, pixelSizeX, , originY, , pixelSizeY] = this.geoTransform;
+    const pixelX = (lon - originX) / pixelSizeX;
+    const pixelY = (lat - originY) / pixelSizeY;
+    return [pixelX, pixelY];
   }
 
   pixelToLonLat(x: number, y: number) {
-    const { scaleX, scaleY, tieX, tieY } = this.transform;
-
-    const lon = tieX + x * scaleX;
-    const lat = tieY + y * scaleY;
+    const [originX, pixelSizeX, , originY, , pixelSizeY] = this.geoTransform;
+    const lon = originX + x * pixelSizeX;
+    const lat = originY + y * pixelSizeY;
     return [lon, lat];
   }
 
@@ -167,21 +225,18 @@ export class Scanner {
   }
 
   getElevationByPixel(x: number, y: number): number {
-    const width = this.window[2] - this.window[0];
-    const index = x - this.window[0] + (y - this.window[1]) * width;
-    const formatIndex = Math.floor(index);
-    const res = this.elevationData[formatIndex];
-    if (!res) {
-      console.log('posi: ', y, x);
-      console.log('width: ', width);
-      console.log('res: ', res);
-      console.log('index: ', index);
-      console.log('formatIndex: ', formatIndex);
-      console.log(
-        'index out of range: ',
-        formatIndex - this.elevationData.length,
-      );
-      throw new Error('index out of range');
+    const idx = Math.floor(y * this.width + x);
+    const res = this.elevationData[idx];
+    if (idx > this.elevationData.length || !res) {
+      console.log({
+        idx,
+        y,
+        width: this.width,
+        height: this.height,
+        x,
+        adL: this.elevationData.length,
+      });
+      return 0;
     }
     return res;
   }
@@ -234,18 +289,18 @@ export class Scanner {
     ];
   }
 
-  computeBoundryOfLine(
-    aim: [number, number][],
-    bearing: number,
-  ): [number, number][] {
+  computeBoundryOfLine(bearing: number): [number, number][] {
     const { lon, lat, radius, elevation } = this.radar;
 
-    let maxSlope = -Infinity;
+    const max_distance_3k = Math.sqrt(radius ** 2 - (3000 - elevation) ** 2);
+    const max_distance_5k = Math.sqrt(radius ** 2 - (5000 - elevation) ** 2);
+    const max_distance_8k = Math.sqrt(radius ** 2 - (8000 - elevation) ** 2);
+    const max_distance_10k = Math.sqrt(radius ** 2 - (10000 - elevation) ** 2);
 
-    let d3 = 0,
-      d5 = 0,
-      d8 = 0,
-      d10 = 0;
+    let slope_3k = (3000 - elevation) / max_distance_3k;
+    let slope_5k = (5000 - elevation) / max_distance_5k;
+    let slope_8k = (8000 - elevation) / max_distance_8k;
+    let slope_10k = (10000 - elevation) / max_distance_10k;
 
     for (
       let distance = this.stepSize;
@@ -257,49 +312,35 @@ export class Scanner {
         distance,
         bearing,
       );
-
       const [x, y] = this.lonLatToPixel(longitude, latitude);
-
-      const elevation_current = this.getElevationBilinear(x, y);
-
-      const terrainSlope = (elevation_current - elevation) / distance;
-
-      // ❗只更新一次
-      if (terrainSlope > maxSlope) {
-        maxSlope = terrainSlope;
+      const elevation_current = this.getElevationByPixel(x, y);
+      const slope = (elevation_current - elevation) / distance;
+      if (slope > slope_3k && distance <= max_distance_3k) {
+        slope_3k = slope;
       }
-
-      // ❗统一用这个 maxSlope 判定
-      const slope3 = (3000 - elevation) / distance;
-      if (slope3 >= maxSlope) d3 = distance;
-
-      const slope5 = (5000 - elevation) / distance;
-      if (slope5 >= maxSlope) d5 = distance;
-
-      const slope8 = (8000 - elevation) / distance;
-      if (slope8 >= maxSlope) d8 = distance;
-
-      const slope10 = (10000 - elevation) / distance;
-      if (slope10 >= maxSlope) d10 = distance;
+      if (slope > slope_5k && distance <= max_distance_5k) {
+        slope_5k = slope;
+      }
+      if (slope > slope_8k && distance <= max_distance_8k) {
+        slope_8k = slope;
+      }
+      if (slope > slope_10k && distance <= max_distance_10k) {
+        slope_10k = slope;
+      }
     }
 
-    const getPoint = (t: { d: number }): [number, number] => {
-      const d = Math.min(t.d, radius); // ❗关键
+    const distance_3k = (3000 - elevation) / slope_3k;
+    const distance_5k = (5000 - elevation) / slope_5k;
+    const distance_8k = (8000 - elevation) / slope_8k;
+    const distance_10k = (10000 - elevation) / slope_10k;
 
+    return [distance_3k, distance_5k, distance_8k, distance_10k].map((d) => {
       const { longitude, latitude } = geolib.computeDestinationPoint(
         { longitude: lon, latitude: lat },
         d,
         bearing,
       );
-
       return [longitude, latitude];
-    };
-
-    return [
-      getPoint({ d: d3 }),
-      getPoint({ d: d5 }),
-      getPoint({ d: d8 }),
-      getPoint({ d: d10 }),
-    ] as [number, number][];
+    });
   }
 }
