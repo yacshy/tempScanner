@@ -70,7 +70,7 @@ export class ScannerAlpha {
       radius ** 2 - (10000 - this.radar.elevation) ** 2,
     );
 
-    // console.log('this.radar.elevation: ', this.radar.elevation);
+    console.log('this.radar.elevation: ', this.radar.elevation);
     // throw new Error('initialize error');
   }
 
@@ -344,24 +344,24 @@ export class ScannerAlpha {
       this.max_distance_10k,
     );
 
-    console.log('slope_3k, slope_5k, slope_8k, slope_10k', {
-      slope_3k,
-      slope_5k,
-      slope_8k,
-      slope_10k,
-      _elevation_3k,
-      _elevation_5k,
-      _elevation_8k,
-      _elevation_10k,
-      _distance_3k,
-      _distance_5k,
-      _distance_8k,
-      _distance_10k,
-      [3000 - elevation]: distance_3k,
-      [5000 - elevation]: distance_5k,
-      [8000 - elevation]: distance_8k,
-      [10000 - elevation]: distance_10k,
-    });
+    // console.log('slope_3k, slope_5k, slope_8k, slope_10k', {
+    //   slope_3k,
+    //   slope_5k,
+    //   slope_8k,
+    //   slope_10k,
+    //   _elevation_3k,
+    //   _elevation_5k,
+    //   _elevation_8k,
+    //   _elevation_10k,
+    //   _distance_3k,
+    //   _distance_5k,
+    //   _distance_8k,
+    //   _distance_10k,
+    //   [3000 - elevation]: distance_3k,
+    //   [5000 - elevation]: distance_5k,
+    //   [8000 - elevation]: distance_8k,
+    //   [10000 - elevation]: distance_10k,
+    // });
 
     // distance_3k = distance_3k < 0 ? this.max_distance_3k : distance_3k;
     // distance_5k = distance_5k < 0 ? this.max_distance_5k : distance_5k;

@@ -1,0 +1,15 @@
+node_modules
+assets
+.git
+*.log
+.env
+.DS_Store
+*.tif
+*.tiff
+data/
+large-files/
+dist
+coverage
+.nyc_output
+README.md
+.gitignore

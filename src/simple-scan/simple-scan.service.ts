@@ -13,19 +13,7 @@ export class SimpleScanService {
     await scanner.initialize();
     const result = scanner.starScan();
     return result.map((coords) => {
-      return {
-        type: 'FeatureCollection',
-        features: [
-          {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-              type: 'Polygon',
-              coordinates: [[...coords, coords[0]]],
-            },
-          },
-        ],
-      };
+      return [...coords, coords[0]];
     });
   }
 }
